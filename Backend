@@ -1,0 +1,560 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+import os, glob
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.callbacks import Callback, EarlyStopping
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
+from sklearn.metrics import classification_report
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+train_path = '/content/drive/MyDrive/train'
+test_path = '/content/drive/MyDrive/test'
+
+train_datagen = ImageDataGenerator(
+    preprocessing_function=preprocess_input,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+test_datagen = ImageDataGenerator(
+    preprocessing_function=preprocess_input,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+train_gen = train_datagen.flow_from_directory(
+    directory=train_path,
+    target_size=(224, 224),
+    class_mode='categorical',
+    batch_size=32,
+    shuffle=True,
+    seed=42
+)
+
+valid_gen = test_datagen.flow_from_directory(
+    directory=test_path,
+    target_size=(224, 224),
+    class_mode='categorical',
+    batch_size=32,
+    shuffle=False,
+    seed=42
+)
+
+test_gen = test_datagen.flow_from_directory(
+    directory=test_path,
+    target_size=(224, 224),
+    class_mode='categorical',
+    batch_size=32,
+    shuffle=False,
+    seed=42
+)
+
+import os
+import matplotlib.pyplot as plt
+
+
+train_classes = os.listdir(train_path)
+test_classes = os.listdir(test_path)
+
+train_class_counts = [len(os.listdir(os.path.join(train_path, class_name))) for class_name in train_classes]
+test_class_counts = [len(os.listdir(os.path.join(test_path, class_name))) for class_name in test_classes]
+
+
+total_train_images = sum(train_class_counts)
+total_test_images = sum(test_class_counts)
+train_test_ratios = [total_train_images, total_test_images]
+
+
+plt.figure(figsize=(8, 6))
+labels = ['Train Images', 'Test Images']
+plt.pie(train_test_ratios, labels=labels, autopct='%1.1f%%', startangle=140)
+plt.title('Train-Test Split Ratio')
+plt.axis('equal')
+plt.show()
+
+
+import os
+import matplotlib.pyplot as plt
+
+
+test_classes = os.listdir(test_path)
+test_class_counts = [len(os.listdir(os.path.join(test_path, class_name))) for class_name in test_classes]
+
+
+plt.figure(figsize=(8, 8))
+plt.pie(test_class_counts, labels=test_classes, autopct='%1.1f%%', startangle=140)
+plt.title('Label Ratios in Test Dataset')
+plt.axis('equal')
+plt.show()
+
+class_labels = sorted(os.listdir(train_path))
+
+
+class_counts = []
+for label in class_labels:
+    class_folder = os.path.join(train_path, label)
+    num_images = len(os.listdir(class_folder))
+    class_counts.append(num_images)
+
+
+plt.figure(figsize=(10, 6))
+plt.bar(class_labels, class_counts)
+plt.xlabel('Classes')
+plt.ylabel('Number of Images')
+plt.title('Class Distribution')
+plt.xticks(rotation=90)
+plt.show()
+
+
+images, labels = next(valid_gen)
+
+
+plt.figure(figsize=(15, 10))
+for i in range(16):
+    plt.subplot(4, 4, i + 1)
+    plt.imshow(images[i])
+    plt.title(f'Label: {np.argmax(labels[i])}')
+    plt.axis('off')
+plt.tight_layout()
+plt.show()
+
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.models import Model
+input_shape = (224, 224, 3)
+
+
+pretrained_model = VGG16(
+    input_shape=input_shape,
+    include_top=False,
+    weights='imagenet',
+    pooling='avg'
+)
+
+
+pretrained_model.trainable = False
+
+
+inputs = pretrained_model.input
+x = Dense(256, activation='relu')(pretrained_model.output)
+x = Dropout(0.5)(x)
+outputs = Dense(31, activation='softmax')(x)
+
+
+model = Model(inputs=pretrained_model.input, outputs=outputs)
+
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+import matplotlib.pyplot as plt
+
+
+history = model.fit(
+    train_gen,
+    validation_data=valid_gen,
+    epochs=7,
+    callbacks=[EarlyStopping(monitor='val_accuracy', patience=3, restore_best_weights=True)]
+)
+
+
+test_results = model.evaluate(test_gen)
+print("Test Loss:", test_results[0])
+print("Test Accuracy:", test_results[1])
+
+
+plt.figure(figsize=(12, 6))
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+input_shape = (224, 224, 3)
+
+
+pretrained_model = ResNet50(
+    input_shape=input_shape,
+    include_top=False,
+    weights='imagenet',
+    pooling='avg'
+)
+
+
+pretrained_model.trainable = False
+
+
+inputs = pretrained_model.input
+x = Dense(256, activation='relu')(pretrained_model.output)
+x = Dropout(0.5)(x)
+outputs = Dense(31, activation='softmax')(x)
+
+
+model = Model(inputs=pretrained_model.input, outputs=outputs)
+
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+import matplotlib.pyplot as plt
+
+
+history = model.fit(
+    train_gen,
+    validation_data=valid_gen,
+    epochs=7,
+    callbacks=[EarlyStopping(monitor='val_accuracy', patience=3, restore_best_weights=True)]
+)
+
+
+test_results = model.evaluate(test_gen)
+print("Test Loss:", test_results[0])
+print("Test Accuracy:", test_results[1])
+
+
+plt.figure(figsize=(12, 6))
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+from tensorflow.keras.applications import InceptionV3
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras import Model
+
+input_shape = (224, 224, 3)
+
+pretrained_model = InceptionV3(
+    input_shape=input_shape,
+    include_top=False,
+    weights='imagenet',
+    pooling='avg'
+)
+
+pretrained_model.trainable = False
+
+inputs = pretrained_model.input
+x = Dense(256, activation='relu')(pretrained_model.output)
+x = Dropout(0.5)(x)
+outputs = Dense(31, activation='softmax')(x)
+
+model = Model(inputs=pretrained_model.input, outputs=outputs)
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+import matplotlib.pyplot as plt
+
+
+history = model.fit(
+    train_gen,
+    validation_data=valid_gen,
+    epochs=7,
+    callbacks=[EarlyStopping(monitor='val_accuracy', patience=3, restore_best_weights=True)]
+)
+
+
+test_results = model.evaluate(test_gen)
+print("Test Loss:", test_results[0])
+print("Test Accuracy:", test_results[1])
+
+
+plt.figure(figsize=(12, 6))
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+misclassified_images = []
+true_labels = []
+
+for image_batch, label_batch in test_gen:
+    predictions = model.predict(image_batch)
+    predicted_labels = np.argmax(predictions, axis=1)
+    true_labels.extend(label_batch)
+
+    misclassified_mask = predicted_labels != np.argmax(label_batch, axis=1)
+    misclassified_images.extend(np.array(image_batch)[misclassified_mask])
+
+    if len(misclassified_images) >= 10:
+        break
+
+
+for img in misclassified_images:
+    plt.imshow(img)
+    plt.show()
+
+!pip install flask-ngrok
+!pip install pyngrok
+!pip install flask_cors
+
+resnet_model_h5 = '/content/drive/MyDrive/resnet (1).h5'
+
+plant_uses = {
+    "Alpinia Galanga (Rasna)":
+        "Alpinia galanga, commonly known as Rasna, is used in traditional medicine for its anti-inflammatory, antioxidant, and digestive properties. It is believed to have benefits for digestion, respiratory health, and pain relief.",
+
+    "Amaranthus Viridis (Arive-Dantu)":
+        "Amaranthus viridis, commonly known as Arive-Dantu or Green Amaranth, is consumed as a leafy vegetable in many cultures. It is rich in vitamins, minerals, and antioxidants and is believed to have various health benefits, including improving digestion, boosting immunity, and promoting cardiovascular health.",
+
+    "Artocarpus Heterophyllus (Jackfruit)":
+        "Artocarpus heterophyllus, commonly known as Jackfruit, is a tropical fruit rich in vitamins, minerals, and dietary fiber. It is consumed fresh or cooked and is used in various culinary preparations. Jackfruit is believed to have benefits for digestion, skin health, and immunity.",
+
+    "Azadirachta Indica (Neem)":
+        "Azadirachta indica, commonly known as Neem, is widely used in traditional medicine for its antibacterial, antiviral, antifungal, and anti-inflammatory properties. It is used to treat various skin conditions, dental issues, and respiratory disorders. Neem is also used as a natural insect repellent and pesticide.",
+
+    "Basella Alba (Basale)":
+        "Basella alba, commonly known as Basale or Malabar Spinach, is a leafy green vegetable rich in vitamins, minerals, and antioxidants. It is used in culinary preparations and is believed to have benefits for digestion, cardiovascular health, and immunity.",
+
+    "Brassica Juncea (Indian Mustard)":
+        "Brassica juncea, commonly known as Indian Mustard, is a species of mustard plant native to South Asia. Its seeds and leaves are used in culinary preparations and traditional medicine. Indian Mustard is believed to have various health benefits, including improving digestion, promoting cardiovascular health, and boosting immunity.",
+
+    "Carissa Carandas (Karanda)":
+        "Carissa carandas, commonly known as Karanda or Karonda, is a berry-like fruit rich in vitamins, minerals, and antioxidants. It is used in culinary preparations and traditional medicine. Karanda is believed to have benefits for digestion, skin health, and immunity.",
+
+    "Citrus Limon (Lemon)":
+        "Citrus limon, commonly known as Lemon, is a citrus fruit rich in vitamin C and antioxidants. It is used in culinary preparations, beverages, and traditional medicine. Lemon is believed to have benefits for digestion, skin health, and immunity.",
+
+    "Ficus Auriculata (Roxburgh fig)":
+        "Ficus auriculata, commonly known as Roxburgh fig or Elephant Ear Fig, is a species of fig tree native to South and Southeast Asia. Its fruits and leaves are used in culinary preparations and traditional medicine. Roxburgh fig is believed to have benefits for digestion, respiratory health, and immunity.",
+
+    "Ficus Religiosa (Peepal Tree)":
+        "Ficus religiosa, commonly known as Peepal Tree or Bodhi Tree, is considered sacred in Hinduism, Buddhism, and Jainism. It is used in traditional medicine for its antibacterial, anti-inflammatory, and antioxidant properties. Peepal Tree is believed to have benefits for respiratory health, skin disorders, and digestive issues.",
+
+    "Hibiscus Rosa-sinensis":
+        "Hibiscus rosa-sinensis, commonly known as Hibiscus or China Rose, is a flowering plant cultivated for its ornamental flowers. In traditional medicine, Hibiscus is used for its anti-inflammatory, antioxidant, and diuretic properties. It is believed to have benefits for cardiovascular health, hair care, and skin health.",
+
+    "Jasminum (Jasmine)":
+        "Jasminum, commonly known as Jasmine, is a genus of flowering plants known for their fragrant flowers. In traditional medicine, Jasmine is used for its calming and sedative properties. It is believed to have benefits for reducing stress, anxiety, and promoting relaxation.",
+
+    "Mangifera Indica (Mango)":
+        "Mangifera indica, commonly known as Mango, is a tropical fruit rich in vitamins, minerals, and antioxidants. It is consumed fresh or used in culinary preparations, beverages, and traditional medicine. Mango is believed to have benefits for digestion, skin health, and immunity.",
+
+    "Mentha (Mint)":
+        "Mentha, commonly known as Mint, is a genus of aromatic herbs used in culinary preparations, beverages, and traditional medicine. Mint is believed to have digestive, analgesic, and anti-inflammatory properties. It is used to treat digestive disorders, headaches, and respiratory issues.",
+
+    "Moringa Oleifera (Drumstick)":
+        "Moringa oleifera, commonly known as Drumstick Tree, is a nutritious plant known for its edible leaves, seeds, and pods. It is rich in vitamins, minerals, and antioxidants and is used in culinary preparations, beverages, and traditional medicine. Moringa is believed to have benefits for nutrition, digestion, and immunity.",
+
+    "Muntingia Calabura (Jamaica Cherry-Gasagase)":
+        "Muntingia calabura, commonly known as Jamaica Cherry or Gasagase, is a tropical fruit tree known for its small, sweet, and juicy berries. It is consumed fresh or used in culinary preparations and traditional medicine. Jamaica Cherry is believed to have benefits for digestion, skin health, and immunity.",
+
+    "Murraya Koenigii (Curry)":
+        "Murraya koenigii, commonly known as Curry Tree, is a culinary herb used in Indian cuisine for its aromatic leaves. In traditional medicine, Curry Tree is used for its antioxidant, anti-inflammatory, and digestive properties. It is believed to have benefits for digestion, hair care, and skin health.",
+
+    "Nerium Oleander (Oleander)":
+        "Nerium oleander, commonly known as Oleander, is an ornamental shrub with attractive flowers. However, all parts of the plant are highly toxic if ingested and can cause severe poisoning. Oleander is not used in traditional medicine due to its toxicity.",
+
+    "Nyctanthes Arbor-tristis (Parijata)":
+        "Nyctanthes arbor-tristis, commonly known as Parijata or Night-flowering Jasmine, is a flowering plant known for its fragrant flowers. In traditional medicine, Parijata is used for its anti-inflammatory, analgesic, and digestive properties. It is believed to have benefits for respiratory health, pain relief, and digestion.",
+
+    "Ocimum Tenuiflorum (Tulsi)":
+        "Ocimum tenuiflorum, commonly known as Tulsi or Holy Basil, is considered sacred in Hinduism and is worshipped as a symbol of purity and devotion. It is used in traditional medicine for its antioxidant, anti-inflammatory, and adaptogenic properties. Tulsi is believed to have benefits for respiratory health, stress relief, and immunity.",
+
+    "Piper Betle (Betel)":
+        "Piper betle, commonly known as Betel Leaf or Paan, is a vine belonging to the Piperaceae family. Betel leaves are used in culinary preparations, chewing, and traditional medicine. Betel is believed to have digestive, stimulant, and antioxidant properties. It is used to treat digestive disorders, freshen breath, and promote oral health.",
+
+    "Plectranthus Amboinicus (Mexican Mint)":
+        "Plectranthus amboinicus, commonly known as Mexican Mint or Indian Borage, is a succulent herb used in culinary preparations and traditional medicine. Mexican Mint is believed to have digestive, anti-inflammatory, and antimicrobial properties. It is used to treat digestive disorders, respiratory issues, and skin conditions.",
+
+    "Pongamia Pinnata (Indian Beech)":
+        "Pongamia pinnata, commonly known as Indian Beech or Pongam Tree, is a tropical tree known for its oil-rich seeds. It is used in traditional medicine for its anti-inflammatory, analgesic, and antimicrobial properties. Indian Beech is believed to have benefits for skin health, wound healing, and pain relief.",
+
+    "Psidium Guajava (Guava)":
+        "Psidium guajava, commonly known as Guava, is a tropical fruit rich in vitamins, minerals, and antioxidants. It is consumed fresh or used in culinary preparations, beverages, and traditional medicine. Guava is believed to have benefits for digestion, skin health, and immunity.",
+
+    "Punica Granatum (Pomegranate)":
+        "Punica granatum, commonly known as Pomegranate, is a fruit-bearing shrub or small tree known for its juicy arils. It is consumed fresh or used in culinary preparations, beverages, and traditional medicine. Pomegranate is believed to have benefits for cardiovascular health, digestion, and immunity.",
+
+    "Santalum Album (Sandalwood)":
+        "Santalum album, commonly known as Sandalwood, is a fragrant wood used in perfumes, incense, and traditional medicine. Sandalwood oil is believed to have anti-inflammatory, antiseptic, and astringent properties. It is used to treat skin disorders, respiratory issues, and anxiety.",
+
+    "Syzygium Cumini (Jamun)":
+        "Syzygium cumini, commonly known as Jamun or Indian Blackberry, is a tropical fruit tree known for its sweet and tangy berries. It is consumed fresh or used in culinary preparations, beverages, and traditional medicine. Jamun is believed to have benefits for digestion, diabetes management, and skin health.",
+
+    "Syzygium Jambos (Rose Apple)":
+        "Syzygium jambos, commonly known as Rose Apple or Jambu, is a tropical fruit tree known for its aromatic fruits. It is consumed fresh or used in culinary preparations, beverages, and traditional medicine. Rose Apple is believed to have benefits for digestion, respiratory health, and skin health.",
+
+    "Tabernaemontana Divaricata (Crape Jasmine)":
+        "Tabernaemontana divaricata, commonly known as Crape Jasmine or Tagar, is a flowering plant known for its fragrant flowers. In traditional medicine, Crape Jasmine is used for its sedative, antispasmodic, and analgesic properties. It is believed to have benefits for stress relief, pain management, and promoting sleep.",
+
+    "Trigonella Foenum-graecum (Fenugreek)":
+        "Trigonella foenum-graecum, commonly known as Fenugreek, is a herb used in culinary preparations, beverages, and traditional medicine. Fenugreek seeds are rich in fiber, protein, vitamins, and minerals. Fenugreek is believed to have benefits for digestion, lactation, diabetes management, and skin health."
+}
+
+from keras.applications.resnet50 import preprocess_input as preprocess_input_resnet
+from keras.applications.vgg19 import preprocess_input as preprocess_input_vgg
+
+_models = [
+    # ['Resnet: ', resnet_model_h5, None]
+    ['Resnet: ', resnet_model_h5  , preprocess_input_resnet],
+     #['VGG: ', vgg_model_h5, preprocess_input_vgg]
+  ]
+
+  from keras import models
+
+def load_models() ->list:
+  loaded_models = []
+
+  for _model in _models:
+    name, path, preprocess_input = _model
+    loaded_model = models.load_model(path)
+    loaded_models.append([name, loaded_model, preprocess_input])
+
+  return loaded_models
+
+  import cv2
+import numpy as np
+from keras.preprocessing import image as keras_image
+
+def preprocess_image(img, preprocess_input):
+  img = np.array(img)
+  img = cv2.resize(img, (224, 224))
+  img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+  img = keras_image.img_to_array(img)
+  img = np.expand_dims(img, axis=0)
+  if preprocess_input:
+    img = preprocess_input(img)
+  return img
+
+  from pyngrok import ngrok
+
+port = 5000
+def connect_ngrok():
+  key = '2dZl6Zq9ijsdjV8clAryzlRdCqw_5aUD7mPSpvFyR9Bz8MWra'
+
+  ngrok.set_auth_token(key)
+  url = ngrok.connect(port).public_url
+  print(url)
+
+  import os, glob
+
+  from flask import Flask, request, jsonify
+from flask_cors import CORS
+import numpy as np
+from PIL import Image
+import io
+
+connect_ngrok()
+
+app = Flask(__name__)
+CORS(app)
+
+loaded_models = load_models()
+
+@app.route('/')
+def get():
+    return 'Flask server is running!'
+
+# Define an endpoint for receiving image and returning prediction
+@app.route('/predict', methods=['POST'])
+def predict():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No file part'})
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'})
+
+    try:
+      predictions = []
+      image = Image.open(io.BytesIO(file.read()))
+
+      train_path='/content/drive/MyDrive/train'
+      class_labels = sorted(os.listdir(train_path))
+      # class_labels = os.listdir(train_path)
+
+      for _model in loaded_models:
+        name, loaded_model, preprocess_input = _model
+        print(name)
+        processed_image = preprocess_image(image, preprocess_input)
+        prediction = loaded_model.predict(processed_image)
+        class_index = np.argmax(prediction)
+        class_label = class_labels[class_index]
+
+        # Assuming your model returns a single prediction for simplicity
+        predictions.append([name, class_label,plant_uses[class_label]])
+
+      return jsonify({'predictions': predictions})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+if __name__ == '__main__':
+    app.run(port=port)  # Run the Flask app
+
